@@ -1,0 +1,47 @@
+#! /usr/bin/env bash
+
+CONFIG_DIR=${1?You must provide a directory to configure user creation}
+
+GROUP=syster
+
+if [ ! -d "${CONFIG_DIR}" ]; then
+  echo "Unable to find config directory: ${CONFIG_DIR}"
+  exit 1
+fi
+
+echo "Checking for existence of ${GROUP}"
+grep ${GROUP} /etc/group
+if [ ! $? -eq 0 ]; then
+  echo "Creating ${GROUP} group"
+  addgroup ${GROUP}
+fi
+
+for dir in ${CONFIG_DIR}*
+do
+  USER=`basename ${dir}`
+  echo "Checking user config dir ${dir}"
+  # each directory describes a user
+  if [ -d "${dir}" ]; then
+    echo "Creating user ${USER}"
+    # only create the user if we don't already have it
+    grep ${USER} /etc/passwd
+    if [ ! $? -eq 0 ]; then
+      adduser --ingroup ${GROUP} --disabled-password --gecos "" ${USER}
+      HOME_DIR=`sudo su ${USER} -c "cd ~ ; pwd"`
+
+      # < add some keys if we have any >
+      mkdir -p ${HOME_DIR}/.ssh
+      touch ${HOME_DIR}/.ssh/authorized_keys
+      for pub_key in ${dir}/*.pub
+      do
+        cat $pub_key >> ${HOME_DIR}/.ssh/authorized_keys
+      done
+      chown -R ${USER}:${GROUP} ${HOME_DIR}/.ssh
+      chmod 744 ${HOME_DIR}/.ssh
+      chmod 644 ${HOME_DIR}/.ssh/authorized_keys
+      # </ add some keys if we have any >
+    else
+      echo "Skipping existing user ${USER}"
+    fi
+  fi
+done
